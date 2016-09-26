@@ -49,6 +49,11 @@ template <typename vectorTypeI, typename vectorTypeS>
    void update_a(const vectorTypeS &SS);
 
  protected:
+   //vector that indicates which of the elements II,JJ input will be
+   //kept and read into the matrix (for symmetric matrices, only those
+   //elements II[i],JJ[i] for which II[i]<<JJ[i] will be kept)
+   std::vector<int> lower_triangular_ind;
+
    Eigen::VectorXi ia, ja;
    std::vector<Eigen::VectorXi> iis;
    Eigen::VectorXd a;

@@ -242,6 +242,8 @@ void run_general_test(const int N)
   pardiso.set_type(11);
   pardiso.set_pattern(II, JJ, SS);
   
+  // just to test
+  pardiso.update_a(SS);
   
   //create ground truth solution
   gt.setRandom(N,1);
@@ -309,7 +311,9 @@ void run_ns_test(const int N)
   extract_ij_from_matrix(A, II, JJ, SS);
   pardiso.set_pattern(II, JJ, SS);
   
-  
+  // just to test
+  pardiso.update_a(SS);
+
   //create ground truth solution
   gt.setRandom(N,1);
 
@@ -376,6 +380,9 @@ void run_si_test(const int N)
   extract_ij_from_matrix(A, II, JJ, SS);
   pardiso.set_pattern(II, JJ, SS);
   
+  // just to test
+  pardiso.update_a(SS);
+
   //create ground truth solution
   gt.setRandom(N,1);
   
@@ -442,7 +449,9 @@ void run_spd_test(const int N)
   extract_ij_from_matrix(A, II, JJ, SS);
   pardiso.set_pattern(II, JJ, SS);
   
-  
+  // just to test
+  pardiso.update_a(SS);
+
   //create ground truth solution
   gt.setRandom(N,1);
 

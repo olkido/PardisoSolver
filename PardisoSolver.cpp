@@ -105,12 +105,22 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS)
     printf("Pardiso mtype not set.");
     exit(1);
   }
+  
+  vectorTypeS SS_true = SS;
+  if (is_symmetric)
+  {
+    SS_true.resize(lower_triangular_ind.size(),1);
+    for (int i = 0; i<lower_triangular_ind.size();++i)
+      SS_true[i] = SS[lower_triangular_ind[i]];
+  }
+  
   for (int i=0; i<a.rows(); ++i)
   {
     a(i) = 0;
     for (int j=0; j<iis[i].size(); ++j)
-      a(i) += SS[iis[i](j)];
+      a(i) += SS_true[iis[i](j)];
   }
+  
 }
 
 //todo: make sure diagonal terms are included, even as zeros (pardiso claims this is necessary for best performance)
@@ -137,17 +147,16 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II,
   //if the matrix is symmetric, only store upper triangular part
   if (is_symmetric)
   {
-    std::vector<int> pick;
-    pick.reserve(II.size()/2);
+    lower_triangular_ind.reserve(II.size()/2);
     for (int i = 0; i<II.size();++i)
       if (II[i]<=JJ[i])
-        pick.push_back(i);
-    M0.resize(pick.size(),3);
-    SS_true.resize(pick.size(),1);
-    for (int i = 0; i<pick.size();++i)
+        lower_triangular_ind.push_back(i);
+    M0.resize(lower_triangular_ind.size(),3);
+    SS_true.resize(lower_triangular_ind.size(),1);
+    for (int i = 0; i<lower_triangular_ind.size();++i)
     {
-      M0.row(i)<< II[pick[i]], JJ[pick[i]], i;
-      SS_true[i] = SS[pick[i]];
+      M0.row(i)<< II[lower_triangular_ind[i]], JJ[lower_triangular_ind[i]], i;
+      SS_true[i] = SS[lower_triangular_ind[i]];
     }
   }
   else
