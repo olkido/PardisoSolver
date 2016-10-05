@@ -98,13 +98,23 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::init()
 }
 
 template <typename vectorTypeI, typename vectorTypeS>
-void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS)
+void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS_)
 {
   if (mtype ==-1)
   {
     printf("Pardiso mtype not set.");
     exit(1);
   }
+  
+  vectorTypeS SS;
+  int numel = SS_.size();
+  int ntotal = numel +numRows;
+  SS.resize(ntotal);
+  for (int k = 0; k < numel; ++k)
+    SS[k] = SS_[k];
+  for (int k = 0; k < numRows; ++k)
+    SS[numel+k] = 0;
+
   
   vectorTypeS SS_true = SS;
   if (is_symmetric)
@@ -123,11 +133,10 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS)
   
 }
 
-//todo: make sure diagonal terms are included, even as zeros (pardiso claims this is necessary for best performance)
 template <typename vectorTypeI, typename vectorTypeS>
-void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II,
-                                                         const vectorTypeI &JJ,
-                                                         const vectorTypeS SS)
+void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II_,
+                                                         const vectorTypeI &JJ_,
+                                                         const vectorTypeS SS_)
 
 
 {
@@ -137,10 +146,34 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II,
     exit(1);
   }
   numRows = 0;
-  for (int i=0; i<II.size(); ++i)
-    if (II[i] > numRows )
-      numRows = II[i];
+  for (int i=0; i<II_.size(); ++i)
+    if (II_[i] > numRows )
+      numRows = II_[i];
   numRows ++;
+  
+  
+  //make sure diagonal terms are included, even as zeros (pardiso claims this is necessary for best performance, and it also prevents it from occasionally hanging with zero diagonal elements)
+  vectorTypeI II;
+  vectorTypeI JJ;
+  vectorTypeS SS;
+  int numel = II_.size();
+  int ntotal = numel +numRows;
+  II.resize(ntotal);
+  JJ.resize(ntotal);
+  SS.resize(ntotal);
+  for (int k = 0; k < numel; ++k)
+  {
+    II[k] = II_[k];
+    JJ[k] = JJ_[k];
+    SS[k] = SS_[k];
+  }
+  for (int k = 0; k < numRows; ++k)
+  {
+    II[numel+k] = k;
+    JJ[numel+k] = k;
+    SS[numel+k] = 0;
+  }
+  
   
   vectorTypeS SS_true = SS;
   Eigen::MatrixXi M0;
