@@ -10,7 +10,20 @@
 
 #include <vector>
 #include <Eigen/Core>
+#include <Eigen/Sparse>
 
+//extract II,JJ,SS (row,column and value vectors) from sparse matrix, Eigen version 
+//Olga Diamanti's method for PARDISO
+void extract_ij_from_matrix(const Eigen::SparseMatrix<double> &A,
+	Eigen::VectorXi &II,
+	Eigen::VectorXi &JJ,
+	Eigen::VectorXd &SS);
+
+//extract II,JJ,SS (row,column and value vectors) from sparse matrix, std::vector version
+void extract_ij_from_matrix(const Eigen::SparseMatrix<double> &A,
+	std::vector<int> &II,
+	std::vector<int> &JJ,
+	std::vector<double> &SS);
 
  extern "C" {
  /* PARDISO prototype. */
@@ -32,13 +45,13 @@ template <typename vectorTypeI, typename vectorTypeS>
    PardisoSolver() ;
    ~PardisoSolver();
    
-   void set_type(int _mtype);
+   void set_type(int _mtype, bool is_upper_half = false);
    
    void init();
 
    void set_pattern(const vectorTypeI &II,
                     const vectorTypeI &JJ,
-                    const vectorTypeS SS);
+                    const vectorTypeS &SS);
    void analyze_pattern();
    
    bool factorize();
@@ -72,6 +85,7 @@ template <typename vectorTypeI, typename vectorTypeS>
    // decide whether to eliminate the non-upper-
    // diagonal entries from the input II,JJ,SS
    bool is_symmetric;
+   bool is_upper_half;
    
    int nrhs = 1;     /* Number of right hand sides. */
    /* Internal solver memory pointer pt, */

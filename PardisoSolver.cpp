@@ -21,13 +21,11 @@ mtype(-1)
 {}
 
 template <typename vectorTypeI, typename vectorTypeS>
-void PardisoSolver<vectorTypeI,vectorTypeS>::set_type(int _mtype)
+void PardisoSolver<vectorTypeI,vectorTypeS>::set_type(int _mtype , bool is_upper_half)
 {
   if ((_mtype !=-2) && (_mtype !=2) && (_mtype !=1) && (_mtype !=11))
-  {
-    printf("Pardiso mtype %d not supported.",_mtype);
-    exit(1);
-  }
+	  throw std::runtime_error(std::string("Pardiso mtype not supported. mtype = ")+std::to_string( _mtype));
+ 
   mtype = _mtype;
   // As per https://software.intel.com/en-us/forums/intel-math-kernel-library/topic/283738
   // structurally symmetric need the full matrix
@@ -35,47 +33,46 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::set_type(int _mtype)
   // diagonal part. So is_symmetric should be set to
   // false in that case.
   is_symmetric = (mtype ==2) ||(mtype ==-2);
+  this->is_upper_half = is_upper_half;
+  if(!is_symmetric && is_upper_half)
+	  throw std::runtime_error("Using upper half is only possible if the matrix is symmetric.");
   init();
 }
 
 template <typename vectorTypeI, typename vectorTypeS>
 void PardisoSolver<vectorTypeI,vectorTypeS>::init()
 {
-  if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
-  /* -------------------------------------------------------------------- */
-  /* ..  Setup Pardiso control parameters.                                */
-  /* -------------------------------------------------------------------- */
-  
-  error = 0;
-  solver=0;/* use sparse direct solver */
-  pardisoinit (pt,  &mtype, &solver, iparm, dparm, &error);
-  
-  if (error != 0)
-  {
-    if (error == -10 )
-      printf("No license file found \n");
-    if (error == -11 )
-      printf("License is expired \n");
-    if (error == -12 )
-      printf("Wrong username or hostname \n");
-    exit(1);
-  }
-  else
-    printf("[PARDISO]: License check was successful ... \n");
+   if (mtype ==-1)
+     throw std::runtime_error("Pardiso mtype not set.");
+
+   /* -------------------------------------------------------------------- */
+   /* ..  Setup Pardiso control parameters.                                */
+   /* -------------------------------------------------------------------- */
+
+   error = 0;
+   solver=0;/* use sparse direct solver */
+   pardisoinit (pt,  &mtype, &solver, iparm, dparm, &error);
+
+   if (error != 0)
+   {
+     if (error == -10 )
+		 throw std::runtime_error("No license file found \n");
+     if (error == -11 )
+		 throw std::runtime_error("License is expired \n");
+     if (error == -12 )
+		 throw std::runtime_error("Wrong username or hostname \n");
+		 }
+ // else
+ //   printf("[PARDISO]: License check was successful ... \n");
   
   
   /* Numbers of processors, value of OMP_NUM_THREADS */
   var = getenv("OMP_NUM_THREADS");
   if(var != NULL)
     sscanf( var, "%d", &num_procs );
-  else {
-    printf("Set environment OMP_NUM_THREADS to 1");
-    exit(1);
-  }
+  else 
+ 	 throw std::runtime_error("Set environment OMP_NUM_THREADS to 1");
+	 
   iparm[2]  = num_procs;
   
   maxfct = 1;		/* Maximum number of numerical factorizations.  */
@@ -99,14 +96,10 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::init()
 
 template <typename vectorTypeI, typename vectorTypeS>
 void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS_)
-{
-  if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
-  
-  vectorTypeS SS;
+ {
+   if (mtype ==-1)
+	   throw std::runtime_error("Pardiso mtype not set.");
+ vectorTypeS SS;
   int numel = SS_.size();
   int ntotal = numel +numRows;
   SS.resize(ntotal);
@@ -114,37 +107,34 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::update_a(const vectorTypeS &SS_)
     SS[k] = SS_[k];
   for (int k = 0; k < numRows; ++k)
     SS[numel+k] = 0;
+   vectorTypeS SS_true = SS;
 
-  
-  vectorTypeS SS_true = SS;
-  if (is_symmetric)
-  {
+   //if the matrix is symmetric, only store upper triangular part
+   if (is_symmetric && !is_upper_half)
+   {
     SS_true.resize(lower_triangular_ind.size(),1);
     for (int i = 0; i<lower_triangular_ind.size();++i)
       SS_true[i] = SS[lower_triangular_ind[i]];
   }
   
+	      
   for (int i=0; i<a.rows(); ++i)
   {
     a(i) = 0;
     for (int j=0; j<iis[i].size(); ++j)
       a(i) += SS_true[iis[i](j)];
   }
-  
 }
 
 template <typename vectorTypeI, typename vectorTypeS>
 void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II_,
                                                          const vectorTypeI &JJ_,
-                                                         const vectorTypeS SS_)
+                                                         const vectorTypeS &SS_)
 
 
 {
   if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
+  	throw std::runtime_error("Pardiso mtype not set.");
   numRows = 0;
   for (int i=0; i<II_.size(); ++i)
     if (II_[i] > numRows )
@@ -178,9 +168,9 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::set_pattern(const vectorTypeI &II_,
   vectorTypeS SS_true = SS;
   Eigen::MatrixXi M0;
   //if the matrix is symmetric, only store upper triangular part
-  if (is_symmetric)
+  if (is_symmetric && !is_upper_half)
   {
-    lower_triangular_ind.reserve(II.size()/2);
+    lower_triangular_ind.reserve(II.size()/2 + numRows / 2 + 1);
     for (int i = 0; i<II.size();++i)
       if (II[i]<=JJ[i])
         lower_triangular_ind.push_back(i);
@@ -281,10 +271,7 @@ template <typename vectorTypeI, typename vectorTypeS>
 void PardisoSolver<vectorTypeI,vectorTypeS>::analyze_pattern()
 {
   if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
+  	throw std::runtime_error("Pardiso mtype not set.");
   
 #ifdef PLOTS_PARDISO
   /* -------------------------------------------------------------------- */
@@ -294,10 +281,8 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::analyze_pattern()
   /* -------------------------------------------------------------------- */
   
   pardiso_chkmatrix  (&mtype, &numRows, a.data(), ia.data(), ja.data(), &error);
-  if (error != 0) {
-    printf("\nERROR in consistency of matrix: %d", error);
-    exit(1);
-  }
+  if (error != 0) 
+  	throw std::runtime_error(std::string("\nERROR in consistency of matrix: ") + std::to_string(error));
 #endif
   /* -------------------------------------------------------------------- */
   /* ..  Reordering and Symbolic Factorization.  This step also allocates */
@@ -309,10 +294,8 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::analyze_pattern()
            &numRows, a.data(), ia.data(), ja.data(), &idum, &nrhs,
            iparm, &msglvl, &ddum, &ddum, &error, dparm);
   
-  if (error != 0) {
-    printf("\nERROR during symbolic factorization: %d", error);
-    exit(1);
-  }
+  if (error != 0) 
+  	throw std::runtime_error(std::string("\nERROR during symbolic factorization: ") + std::to_string(error));
 #ifdef PLOTS_PARDISO
   printf("\nReordering completed ... ");
   printf("\nNumber of nonzeros in factors  = %d", iparm[17]);
@@ -325,10 +308,7 @@ template <typename vectorTypeI, typename vectorTypeS>
 bool PardisoSolver<vectorTypeI,vectorTypeS>::factorize()
 {
   if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
+  	throw std::runtime_error("Pardiso mtype not set.");
   /* -------------------------------------------------------------------- */
   /* ..  Numerical factorization.                                         */
   /* -------------------------------------------------------------------- */
@@ -339,10 +319,8 @@ bool PardisoSolver<vectorTypeI,vectorTypeS>::factorize()
            &numRows, a.data(), ia.data(), ja.data(), &idum, &nrhs,
            iparm, &msglvl, &ddum, &ddum, &error,  dparm);
   
-  if (error != 0) {
-    printf("\nERROR during numerical factorization: %d", error);
-    exit(2);
-  }
+  if (error != 0) 
+  	throw std::runtime_error(std::string("\nERROR during numerical factorization: ")+std::to_string(error));
 #ifdef PLOTS_PARDISO
   printf ("\nFactorization completed ... ");
 #endif
@@ -354,10 +332,7 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::solve(Eigen::VectorXd &rhs,
                                                    Eigen::VectorXd &result)
 {
   if (mtype ==-1)
-  {
-    printf("Pardiso mtype not set.");
-    exit(1);
-  }
+  	throw std::runtime_error("Pardiso mtype not set.");
   
 #ifdef PLOTS_PARDISO
   /* -------------------------------------------------------------------- */
@@ -398,10 +373,9 @@ void PardisoSolver<vectorTypeI,vectorTypeS>::solve(Eigen::VectorXd &rhs,
            &numRows, a.data(), ia.data(), ja.data(), &idum, &nrhs,
            iparm, &msglvl, rhs.data(), result.data(), &error,  dparm);
   
-  if (error != 0) {
-    printf("\nERROR during solution: %d", error);
-    exit(3);
-  }
+  if (error != 0) 
+  	throw std::runtime_error(std::string("\nERROR during solution: ") + std::to_string(error));
+	
 #ifdef PLOTS_PARDISO
   printf("\nSolve completed ... ");
   printf("\nThe solution of the system is: ");
@@ -431,3 +405,45 @@ template class PardisoSolver<std::vector<int, std::allocator<int> >, std::vector
 
 template class PardisoSolver<Eigen::Matrix<int, -1, 1, 0, -1, 1>, Eigen::Matrix<double, -1, 1, 0, -1, 1> >;
 
+//extract II,JJ,SS (row,column and value vectors) from sparse matrix, Eigen version 
+//Olga Diamanti's method for PARDISO
+void extract_ij_from_matrix(const Eigen::SparseMatrix<double>& A, Eigen::VectorXi & II, Eigen::VectorXi & JJ, Eigen::VectorXd & SS)
+{
+	II.resize(A.nonZeros());
+	JJ.resize(A.nonZeros());
+	SS.resize(A.nonZeros());
+	int ind = 0;
+	for (int k = 0; k < A.outerSize(); ++k)
+		for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+		{
+			double ss = it.value();
+			int ii = it.row();   // row index
+			int jj = it.col();   // row index
+			{
+				II[ind] = ii;
+				JJ[ind] = jj;
+				SS[ind] = ss;
+				ind++;
+			}
+		}
+}
+
+//extract II,JJ,SS (row,column and value vectors) from sparse matrix, std::vector version
+void extract_ij_from_matrix(const Eigen::SparseMatrix<double>& A, std::vector<int>& II, std::vector<int>& JJ, std::vector<double>& SS)
+{
+	II.clear();
+	JJ.clear();
+	SS.clear();
+	for (int k = 0; k < A.outerSize(); ++k)
+		for (Eigen::SparseMatrix<double>::InnerIterator it(A, k); it; ++it)
+		{
+			double ss = it.value();
+			int ii = it.row();   // row index
+			int jj = it.col();   // row index
+			{
+				II.push_back(ii);
+				JJ.push_back(jj);
+				SS.push_back(ss);
+			}
+		}
+}
